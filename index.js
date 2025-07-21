@@ -10,6 +10,9 @@ app.use(express.json())
 app.use(cors());
 
 const PORT = process.env.PORT || 8080;
+app.listen(PORT, () => {
+  console.log(`🚀 Server is running on port ${PORT}`);
+});
 
 app.post("/webhook", async (req, res) => {
     var id = (res.req.body.session).substr(43);
