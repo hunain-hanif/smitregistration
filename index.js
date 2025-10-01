@@ -6,13 +6,13 @@ const nodemailer = require("nodemailer");
 const { MongoClient } = require("mongodb"); // MongoDB driver
 
 // ====== MongoDB Connection ======
-const uri = "mongodb+srv://hunainhanif35_db_user:RqH6ReTJ94DbIRcL@smit-registration-dialo.fghxxjt.mongodb.net/?retryWrites=true&w=majority&appName=smit-registration-dialogflow"; // Replace with your MongoDB Atlas URI
+const uri = "mongodb+srv://hunainhanif35_db_user:RqH6ReTJ94DbIRcL@smit-registration-dialo.fghxxjt.mongodb.net/?retryWrites=true&w=majority&appName=smit-registration-dialogflow";
 const client = new MongoClient(uri);
 let db;
 
 client.connect()
   .then(() => {
-    db = client.db("dialogflowDB"); // Use your DB name
+    db = client.db("dialogflowDB"); // database name
     console.log("✅ Connected to MongoDB");
   })
   .catch(err => {
@@ -32,14 +32,16 @@ app.listen(PORT, () => {
 // ====== Webhook ======
 app.post("/webhook", async (req, res) => {
   const agent = new WebhookClient({ request: req, response: res });
+  console.log("🔥 Webhook triggered for intent:", agent.intent);
 
   // === Intent Handlers ===
   function hi(agent) {
-    console.log(`intent => hi`);
+    console.log("👉 Intent: hi");
     agent.add("Hello! 👋 Welcome to SMIT registration.");
   }
 
   function available_courses(agent) {
+    console.log("👉 Intent: available_courses");
     agent.add(`We offer the following IT courses:
 1. Web & Mobile App Development
 2. Graphic Designing
@@ -51,6 +53,7 @@ Let me know if you would like to register!
   }
 
   function course_information(agent) {
+    console.log("👉 Intent: course_information");
     agent.add(`Classes are held weekdays in the morning and evening batches.
 Duration: 8-10 months.
 Basic computer knowledge is recommended but not required.
@@ -59,6 +62,9 @@ Attendance is mandatory.
   }
 
   async function register(agent) {
+    console.log("👉 Intent: register");
+    console.log("📥 Parameters received:", agent.parameters);
+
     const { number, any, lastname, phone, courses, email } = agent.parameters;
     const courseName = Array.isArray(courses) ? courses[0] : courses;
 
@@ -69,7 +75,7 @@ Attendance is mandatory.
       secure: false,
       auth: {
         user: "webwisdom35@gmail.com",
-        pass: "onqr zypr bjod actg", // ⚠️ use app password not real Gmail password
+        pass: "onqr zypr bjod actg", // App password, not Gmail password
       },
     });
 
@@ -91,7 +97,7 @@ Attendance is mandatory.
         <p><strong>Name:</strong> ${any}</p>
         <p><strong>Father Name:</strong> ${lastname}</p>
         <p><strong>CNIC:</strong> ${number}</p>
-        <p><strong>Course:</strong> ${courses}</p>
+        <p><strong>Course:</strong> ${courseName}</p>
         <div style="margin-top: 40px; font-size: 12px; text-align: center;">
           <p><strong>Note:</strong> This card is for SMIT's premises only.<br>If found please return to SMIT</p>
         </div>
@@ -103,9 +109,9 @@ Attendance is mandatory.
     `;
 
     try {
-      // === Save to MongoDB instead of Sheet.best ===
+      // === Save to MongoDB ===
       if (db) {
-        const result = await db.collection("register").insertOne(rowData);
+        const result = await db.collection("registrations").insertOne(rowData);
         console.log("✅ Registration saved to MongoDB:", result.insertedId);
       } else {
         console.error("❌ MongoDB not connected!");
@@ -126,7 +132,7 @@ Attendance is mandatory.
 👤 Name: ${any} ${lastname}
 📞 Phone: ${phone}
 📧 Email: ${email}
-📘 Course: ${courses}
+📘 Course: ${courseName}
 🔢 CNIC: ${number}
 Your data has been saved to our database and ID card sent to your email.`);
     } catch (error) {
