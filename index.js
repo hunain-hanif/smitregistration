@@ -105,7 +105,7 @@ Attendance is mandatory.
     try {
       // === Save to MongoDB instead of Sheet.best ===
       if (db) {
-        const result = await db.collection("registrations").insertOne(rowData);
+        const result = await db.collection("register").insertOne(rowData);
         console.log("✅ Registration saved to MongoDB:", result.insertedId);
       } else {
         console.error("❌ MongoDB not connected!");
