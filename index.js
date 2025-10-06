@@ -29,9 +29,9 @@ client.connect()
       res.send("Hello World");
     });
 
-    app.post("/webhook", async (req, res) => {
+    app.post("/webhook", (req, res) => {
       const id = (req.body.session || "").substr(43);
-      console.log(id);
+      console.log("Session ID:", id);
       const agent = new WebhookClient({ request: req, response: res });
 
       function hi(agent) {
@@ -58,13 +58,14 @@ Attendance is mandatory.
 `);
       }
 
-      // Make register async so we can await DB and email
       async function register(agent) {
+        console.log("Register intent triggered");
         const { number, any, lastname, phone, courses, email } = agent.parameters;
+        console.log("Parameters:", { number, any, lastname, phone, courses, email });
 
-        // Save to MongoDB first
         try {
           if (!db) {
+            console.error("DB not available");
             agent.add("Database connection error. Please try again later.");
             return;
           }
@@ -82,7 +83,6 @@ Attendance is mandatory.
           const result = await db.collection("register").insertOne(register);
           console.log("Lead saved to MongoDB", result.insertedId);
 
-          // Send email
           const transporter = nodemailer.createTransport({
             host: "smtp.gmail.com",
             port: 587,
@@ -93,7 +93,7 @@ Attendance is mandatory.
             },
           });
 
-          await transporter.sendMail({
+          const mailResult = await transporter.sendMail({
             from: "webwisdom35@gmail.com",
             to: email,
             subject: "SMIT Registration Confirmation",
@@ -114,6 +114,7 @@ Attendance is mandatory.
             </div>
             `
           });
+          console.log("Email sent:", mailResult.messageId);
 
           agent.add(`✅ Registration Complete!
 👤 Name: ${any} ${lastname}
@@ -132,7 +133,7 @@ Your data has been saved and ID card sent to your email.`);
       intentMap.set('hi', hi);
       intentMap.set('available_courses', available_courses);
       intentMap.set('course_information', course_information);
-      intentMap.set('register', register);
+      intentMap.set('register', async (agent) => await register(agent)); // <-- Important fix
 
       agent.handleRequest(intentMap);
     });
