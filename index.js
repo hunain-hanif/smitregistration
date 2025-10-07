@@ -70,7 +70,7 @@ Attendance is mandatory.
             return;
           }
 
-          const register = {
+          const lead = {
             number,
             name: any,
             lastname,
@@ -80,7 +80,7 @@ Attendance is mandatory.
             timestamp: new Date()
           };
 
-          const result = await db.collection("register").insertOne(register);
+          const result = await db.collection("register").insertOne(lead);
           console.log("Lead saved to MongoDB", result.insertedId);
 
           const transporter = nodemailer.createTransport({
