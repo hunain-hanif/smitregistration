@@ -12,11 +12,12 @@
   "dependencies": {
     "@google-cloud/dialogflow": "^7.2.0",
     "cors": "^2.8.5",
+    "dialogflow": "^1.2.0",
     "dialogflow-fulfillment": "^0.5.0",
     "express": "^5.1.0",
     "mongodb": "^6.20.0",
     "ngrok": "^5.0.0-beta.2",
-    "nodemailer": "^7.0.6",
+    "nodemailer": "^7.0.9",
     "nodemon": "^3.1.10"
   }
 }
