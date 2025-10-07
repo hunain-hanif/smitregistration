@@ -89,7 +89,7 @@ Basic computer knowledge is helpful but not required.`);
 
     try {
       // Save user data in MongoDB
-      const newRegistration = {
+      const registration = {
         name: any,
         lastname,
         cnic: number,
@@ -99,7 +99,7 @@ Basic computer knowledge is helpful but not required.`);
         createdAt: new Date(),
       };
 
-      const result = await db.collection("registrations").insertOne(newRegistration);
+      const result = await db.collection("registration").insertOne(registration);
       console.log("✅ Data saved to MongoDB:", result.insertedId);
 
       // Send confirmation email
