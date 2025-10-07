@@ -115,7 +115,7 @@ Your ID card has been sent to your email. Please check your inbox! 📩`);
         secure: false, // true for port 465, false for others
         auth: {
           user: "webwisdom35@gmail.com",
-          pass: "onqr zypr bjod actg", // your Gmail app password
+          pass: "yghh jqwm oklq onek", // your Gmail app password
         },
       });
 
