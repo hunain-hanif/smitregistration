@@ -5,23 +5,26 @@ const nodemailer = require("nodemailer");
 const cors = require("cors");
 const { MongoClient } = require("mongodb");
 
-// === MongoDB Connection ===
-const uri = "mongodb+srv://hunainhanif35_db_user:RqH6ReTJ94DbIRcL@smit-registration-dialo.fghxxjt.mongodb.net/?retryWrites=true&w=majority";
-const client = new MongoClient(uri);
-let db;
-
-client.connect()
-  .then(() => {
-    db = client.db("dialogflowDB");
-    console.log("✅ Connected to MongoDB");
-  })
-  .catch(err => console.error("❌ MongoDB connection failed:", err));
-
-// === Express Setup ===
 const app = express();
 app.use(express.json());
 app.use(cors());
 const PORT = process.env.PORT || 8080;
+
+// === MongoDB Connection ===
+const uri = "mongodb+srv://hunainhanif35_db_user:RqH6ReTJ94DbIRcL@smit-registration-dialo.fghxxjt.mongodb.net/?retryWrites=true&w=majority";
+let db;
+
+async function connectDB() {
+  try {
+    const client = new MongoClient(uri);
+    await client.connect();
+    db = client.db("dialogflowDB");
+    console.log("✅ Connected to MongoDB");
+  } catch (err) {
+    console.error("❌ MongoDB connection failed:", err);
+  }
+}
+connectDB();
 
 // === Default Route ===
 app.get("/", (req, res) => res.send("🚀 Webhook Running"));
@@ -30,9 +33,7 @@ app.get("/", (req, res) => res.send("🚀 Webhook Running"));
 app.post("/webhook", async (req, res) => {
   const agent = new WebhookClient({ request: req, response: res });
 
-  // === INTENTS ===
   function hi(agent) {
-    console.log("👉 Intent: hi");
     agent.add("Hello! 👋 Welcome to SMIT registration.");
   }
 
@@ -53,11 +54,7 @@ Duration: 8–10 months.
 Attendance is mandatory.`);
   }
 
-  // === REGISTER INTENT ===
   async function register(agent) {
-    console.log("👉 Intent: register");
-
-    // Extract & clean parameters
     const { number, any, lastname, phone, courses, email } = agent.parameters;
     const clean = {
       number: Array.isArray(number) ? number[0] : number,
@@ -69,71 +66,55 @@ Attendance is mandatory.`);
       timestamp: new Date(),
     };
 
-    console.log("📦 Clean Data:", clean);
-
-    // 🟢 Respond to Dialogflow first (so no timeout)
     agent.add(`✅ Registration received!  
 👤 ${clean.name} ${clean.lastname}  
 📧 ${clean.email}  
 Your confirmation email will arrive soon!`);
 
-    // 🔵 Process saving + email in background (non-blocking)
-    setTimeout(async () => {
-      try {
-        // Save to MongoDB
-        if (db) {
-          const result = await db.collection("register").insertOne(clean);
-          console.log("✅ Saved to MongoDB:", result.insertedId);
-        }
+    // === Background save + email ===
+    try {
+      if (!db) return console.error("❌ No DB connection yet");
 
-        // Send Email
-        const transporter = nodemailer.createTransport({
-          host: "smtp.gmail.com",
-          port: 587,
-          secure: false,
-          auth: {
-            user: "webwisdom35@gmail.com",
-            pass: "onqr zypr bjod actg", // Gmail App Password
-          },
-        });
+      const result = await db.collection("register").insertOne(clean);
+      console.log("✅ Saved to MongoDB:", result.insertedId);
 
-        const htmlBody = `
-        <div style="width: 350px; border: 2px solid #000; font-family: Arial; padding: 20px;">
-          <img style="display:block;margin:auto" width="150" height="150"
-            src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQ-cXFuavrc6SQ1s7DJvs55FQ-BF0bqYSM-iw&s" alt="">
-          <h3 style="text-align:center;">SMIT Registration Card</h3>
-          <p><strong>Name:</strong> ${clean.name}</p>
-          <p><strong>Father Name:</strong> ${clean.lastname}</p>
+      const transporter = nodemailer.createTransport({
+        service: "gmail",
+        auth: {
+          user: "webwisdom35@gmail.com",
+          pass: "onqr zypr bjod actg", // Gmail App Password
+        },
+      });
+
+      const htmlBody = `
+        <div style="border:2px solid #000;padding:15px;font-family:Arial">
+          <h3>🎓 SMIT Registration Card</h3>
+          <p><strong>Name:</strong> ${clean.name} ${clean.lastname}</p>
           <p><strong>CNIC:</strong> ${clean.number}</p>
-          <p><strong>Course:</strong> ${clean.courses}</p>
           <p><strong>Phone:</strong> ${clean.phone}</p>
+          <p><strong>Course:</strong> ${clean.courses}</p>
           <p><strong>Email:</strong> ${clean.email}</p>
-          <hr>
-          <p style="font-size:12px;text-align:center;">This card is valid for SMIT's premises only.<br>If found, please return to SMIT.</p>
-        </div>
-        `;
+        </div>`;
 
-        const info = await transporter.sendMail({
-          from: '"SMIT Registration" <webwisdom35@gmail.com>',
-          to: clean.email,
-          subject: "🎓 SMIT Registration Confirmation",
-          html: htmlBody,
-        });
+      const info = await transporter.sendMail({
+        from: '"SMIT Registration" <webwisdom35@gmail.com>',
+        to: clean.email,
+        subject: "🎓 SMIT Registration Confirmation",
+        html: htmlBody,
+      });
 
-        console.log("📧 Email sent:", info.messageId);
-      } catch (err) {
-        console.error("❌ Background error:", err);
-      }
-    }, 500);
+      console.log("📧 Email sent:", info.messageId);
+    } catch (err) {
+      console.error("❌ Background error:", err);
+    }
   }
 
-  // === Intent Map ===
-  const intentMap = new Map();
-  intentMap.set("Default Welcome Intent", hi);
-  intentMap.set("available_courses", available_courses);
-  intentMap.set("course_information", course_information);
-  intentMap.set("register", register);
-
+  const intentMap = new Map([
+    ["Default Welcome Intent", hi],
+    ["available_courses", available_courses],
+    ["course_information", course_information],
+    ["register", register],
+  ]);
   agent.handleRequest(intentMap);
 });
 
