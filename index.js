@@ -1,14 +1,17 @@
 const dialogflow = require('@google-cloud/dialogflow');
 const { WebhookClient } = require('dialogflow-fulfillment');
 const express = require("express");
+const nodemailer = require("nodemailer");
 const cors = require("cors");
 const { MongoClient } = require("mongodb");
 
-// === MongoDB Connection Setup ===
+// MongoDB connection setup
 const uri = "mongodb+srv://hunainhanif35_db_user:RqH6ReTJ94DbIRcL@smit-registration-dialo.fghxxjt.mongodb.net/?retryWrites=true&w=majority";
 const client = new MongoClient(uri);
+
 let db;
 
+// Connect MongoDB
 client.connect()
   .then(() => {
     db = client.db("dialogflowDB");
@@ -18,27 +21,25 @@ client.connect()
     console.error("❌ Failed to connect to MongoDB", err);
   });
 
-// === Express Setup ===
 const app = express();
 app.use(express.json());
 app.use(cors());
+
 const PORT = process.env.PORT || 8080;
 
-// === Root Route ===
 app.get("/", (req, res) => {
   res.send("🚀 SMIT Registration Webhook Running...");
 });
 
-// === Dialogflow Webhook ===
 app.post("/webhook", async (req, res) => {
   const id = (req.body.session || "").substr(43);
   console.log("🆔 Session ID:", id);
 
   const agent = new WebhookClient({ request: req, response: res });
 
-  // === INTENTS ===
+  // ---- INTENTS ----
   function hi(agent) {
-    console.log("👉 Intent: hi");
+    console.log(`👉 Intent: hi`);
     agent.add("Hello! 👋 Welcome to SMIT registration.");
   }
 
@@ -62,40 +63,34 @@ Attendance is mandatory.
 Basic computer knowledge is helpful but not required.`);
   }
 
-  // === REGISTER INTENT ===
   async function register(agent) {
     console.log("👉 Intent: register triggered");
 
-    // Helper function to clean parameter values
-    const getValue = (param) => {
-      if (!param) return "";
-      if (Array.isArray(param)) return param[0];       // pick first if array
-      if (typeof param === "object" && param.value) return param.value; // handle object format
-      return param;
-    };
+    // Get parameters
+    const { number, any, lastname, phone, courses, email } = agent.parameters;
 
-    // Clean all Dialogflow parameters
+    // Fix: Extract first value if it’s an array
     const cleanData = {
-      number: getValue(agent.parameters.number),
-      name: getValue(agent.parameters.any),
-      lastname: getValue(agent.parameters.lastname),
-      phone: getValue(agent.parameters.phone),
-      courses: getValue(agent.parameters.courses),
-      email: getValue(agent.parameters.email),
+      number: Array.isArray(number) ? number[0] : number,
+      name: Array.isArray(any) ? any[0] : any,
+      lastname: Array.isArray(lastname) ? lastname[0] : lastname,
+      phone: Array.isArray(phone) ? phone[0] : phone,
+      courses: Array.isArray(courses) ? courses[0] : courses,
+      email: Array.isArray(email) ? email[0] : email,
       timestamp: new Date(),
     };
 
     console.log("📦 Cleaned Data:", cleanData);
 
-    // Send response back to Dialogflow
     agent.add(`✅ Registration complete!  
 👤 Name: ${cleanData.name} ${cleanData.lastname}  
 📞 Phone: ${cleanData.phone || "Not provided"}  
 📧 Email: ${cleanData.email}  
 📘 Course: ${cleanData.courses}  
-🔢 CNIC: ${cleanData.number}`);
+🔢 CNIC: ${cleanData.number}  
 
-    // Save to MongoDB
+Your ID card has been sent to your email.`);
+
     if (db) {
       try {
         const result = await db.collection("register").insertOne(cleanData);
@@ -108,17 +103,16 @@ Basic computer knowledge is helpful but not required.`);
     }
   }
 
-  // === Intent Map ===
+  // ---- Intent Map ----
   let intentMap = new Map();
-  intentMap.set("Default Welcome Intent", hi);
-  intentMap.set("available_courses", available_courses);
-  intentMap.set("course_information", course_information);
-  intentMap.set("register", register);
+  intentMap.set('Default Welcome Intent', hi);
+  intentMap.set('available_courses', available_courses);
+  intentMap.set('course_information', course_information);
+  intentMap.set('register', register);
 
   agent.handleRequest(intentMap);
 });
 
-// === Start Server ===
 app.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
 });
