@@ -1,133 +1,118 @@
+const dialogflow = require('@google-cloud/dialogflow');
+const { WebhookClient } = require('dialogflow-fulfillment');
 const express = require("express");
-const cors = require("cors");
-const { WebhookClient } = require("dialogflow-fulfillment");
 const nodemailer = require("nodemailer");
+const cors = require("cors");
 const { MongoClient } = require("mongodb");
 
-// === MongoDB ===
+// MongoDB connection setup
 const uri = "mongodb+srv://hunainhanif35_db_user:RqH6ReTJ94DbIRcL@smit-registration-dialo.fghxxjt.mongodb.net/?retryWrites=true&w=majority";
 const client = new MongoClient(uri);
+
 let db;
 
+// Connect MongoDB
 client.connect()
   .then(() => {
     db = client.db("dialogflowDB");
-    console.log("✅ MongoDB connected");
+    console.log("✅ Connected to MongoDB");
   })
-  .catch(err => console.error("❌ MongoDB error:", err));
+  .catch(err => {
+    console.error("❌ Failed to connect to MongoDB", err);
+  });
 
-// === Express ===
 const app = express();
 app.use(express.json());
 app.use(cors());
+
 const PORT = process.env.PORT || 8080;
 
-app.get("/", (_, res) => res.send("🚀 Webhook running"));
+app.get("/", (req, res) => {
+  res.send("🚀 SMIT Registration Webhook Running...");
+});
 
-// === Webhook ===
 app.post("/webhook", async (req, res) => {
+  const id = (req.body.session || "").substr(43);
+  console.log("🆔 Session ID:", id);
+
   const agent = new WebhookClient({ request: req, response: res });
 
-  // --- INTENTS ---
+  // ---- INTENTS ----
   function hi(agent) {
-    agent.add("👋 Hello! Welcome to SMIT registration.");
+    console.log(`👉 Intent: hi`);
+    agent.add("Hello! 👋 Welcome to SMIT registration.");
   }
 
   function available_courses(agent) {
-    agent.add(`📘 Available Courses:
+    console.log("👉 Intent: available_courses");
+    agent.add(`We offer the following IT courses:
 1️⃣ Web & Mobile App Development
 2️⃣ Graphic Designing
 3️⃣ Data Science & AI
 4️⃣ Cloud Computing
-5️⃣ Cyber Security`);
+5️⃣ Cyber Security
+Would you like to register for one of these?`);
   }
 
   function course_information(agent) {
-    agent.add(`🧠 Classes are held weekdays (morning/evening).
-Duration: 8–10 months. Attendance mandatory.`);
+    console.log("👉 Intent: course_information");
+    agent.add(`📘 Course Information:
+Classes are held on weekdays, morning and evening batches.
+Duration: 8–10 months.
+Attendance is mandatory.
+Basic computer knowledge is helpful but not required.`);
   }
 
   async function register(agent) {
+    console.log("👉 Intent: register triggered");
+
+    // Get parameters
     const { number, any, lastname, phone, courses, email } = agent.parameters;
 
-    const data = {
+    // Fix: Extract first value if it’s an array
+    const cleanData = {
+      number: Array.isArray(number) ? number[0] : number,
       name: Array.isArray(any) ? any[0] : any,
-      fatherName: Array.isArray(lastname) ? lastname[0] : lastname,
-      cnic: Array.isArray(number) ? number[0] : number,
+      lastname: Array.isArray(lastname) ? lastname[0] : lastname,
       phone: Array.isArray(phone) ? phone[0] : phone,
-      course: Array.isArray(courses) ? courses[0] : courses,
+      courses: Array.isArray(courses) ? courses[0] : courses,
       email: Array.isArray(email) ? email[0] : email,
       timestamp: new Date(),
     };
 
-    console.log("📦 Received:", data);
+    console.log("📦 Cleaned Data:", cleanData);
 
-    // Respond immediately to Dialogflow to prevent timeout
-    agent.add(`✅ Registration received!
-👤 ${data.name} ${data.fatherName}
-📧 ${data.email}
-📘 ${data.course}
-Your confirmation email will arrive soon.`);
+    agent.add(`✅ Registration complete!  
+👤 Name: ${cleanData.name} ${cleanData.lastname}  
+📞 Phone: ${cleanData.phone || "Not provided"}  
+📧 Email: ${cleanData.email}  
+📘 Course: ${cleanData.courses}  
+🔢 CNIC: ${cleanData.number}  
 
-    // Background async task (MongoDB + Nodemailer)
-    (async () => {
+Your ID card has been sent to your email.`);
+
+    if (db) {
       try {
-        // Save to MongoDB
-        if (db) {
-          await db.collection("register").insertOne(data);
-          console.log("✅ Saved to MongoDB");
-        }
-
-        // Setup Nodemailer
-        const transporter = nodemailer.createTransport({
-          host: "smtp.gmail.com",
-          port: 587,
-          secure: false,
-          auth: {
-            user: "webwisdom35@gmail.com",
-            pass: "onqr zypr bjod actg", // your Gmail app password
-          },
-        });
-
-        // Email HTML
-        const html = `
-        <div style="width:320px;border:2px solid #000;padding:20px;font-family:Arial">
-          <img style="display:block;margin:auto" width="150"
-            src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQ-cXFuavrc6SQ1s7DJvs55FQ-BF0bqYSM-iw&s" alt="">
-          <h3 style="text-align:center;">🎓 SMIT Registration</h3>
-          <p><b>Name:</b> ${data.name}</p>
-          <p><b>Father Name:</b> ${data.fatherName}</p>
-          <p><b>CNIC:</b> ${data.cnic}</p>
-          <p><b>Course:</b> ${data.course}</p>
-          <p><b>Phone:</b> ${data.phone}</p>
-          <p><b>Email:</b> ${data.email}</p>
-          <hr>
-          <p style="font-size:12px;text-align:center;">Valid for SMIT’s premises only.</p>
-        </div>`;
-
-        const info = await transporter.sendMail({
-          from: '"SMIT Registration" <webwisdom35@gmail.com>',
-          to: data.email,
-          subject: "🎓 SMIT Registration Confirmation",
-          html,
-        });
-
-        console.log("📧 Email sent:", info.messageId);
+        const result = await db.collection("register").insertOne(cleanData);
+        console.log("✅ Lead saved to MongoDB:", result.insertedId);
       } catch (err) {
-        console.error("❌ Background process failed:", err);
+        console.error("❌ Error saving to MongoDB:", err);
       }
-    })();
+    } else {
+      console.error("❌ No MongoDB connection available.");
+    }
   }
 
-  // === Intent Map ===
-  const intentMap = new Map([
-    ["Default Welcome Intent", hi],
-    ["available_courses", available_courses],
-    ["course_information", course_information],
-    ["register", register],
-  ]);
+  // ---- Intent Map ----
+  let intentMap = new Map();
+  intentMap.set('Default Welcome Intent', hi);
+  intentMap.set('available_courses', available_courses);
+  intentMap.set('course_information', course_information);
+  intentMap.set('register', register);
 
   agent.handleRequest(intentMap);
 });
 
-app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
+app.listen(PORT, () => {
+  console.log(`🚀 Server running on port ${PORT}`);
+});
