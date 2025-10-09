@@ -89,7 +89,7 @@ Basic computer knowledge is helpful but not required.`);
 📘 Course: ${cleanData.courses}  
 🔢 CNIC: ${cleanData.number}  
 
-Your ID card has been sent to your email.`);
+Your registration has completed .`);
 
     if (db) {
       try {
