@@ -1,122 +1,133 @@
-const dialogflow = require('@google-cloud/dialogflow');
-const { WebhookClient } = require('dialogflow-fulfillment');
 const express = require("express");
-const nodemailer = require("nodemailer");
 const cors = require("cors");
+const { WebhookClient } = require("dialogflow-fulfillment");
+const nodemailer = require("nodemailer");
 const { MongoClient } = require("mongodb");
 
+// === MongoDB ===
+const uri = "mongodb+srv://hunainhanif35_db_user:RqH6ReTJ94DbIRcL@smit-registration-dialo.fghxxjt.mongodb.net/?retryWrites=true&w=majority";
+const client = new MongoClient(uri);
+let db;
+
+client.connect()
+  .then(() => {
+    db = client.db("dialogflowDB");
+    console.log("✅ MongoDB connected");
+  })
+  .catch(err => console.error("❌ MongoDB error:", err));
+
+// === Express ===
 const app = express();
 app.use(express.json());
 app.use(cors());
 const PORT = process.env.PORT || 8080;
 
-// === MongoDB Connection ===
-const uri = "mongodb+srv://hunainhanif35_db_user:RqH6ReTJ94DbIRcL@smit-registration-dialo.fghxxjt.mongodb.net/?retryWrites=true&w=majority";
-let db;
+app.get("/", (_, res) => res.send("🚀 Webhook running"));
 
-async function connectDB() {
-  try {
-    const client = new MongoClient(uri);
-    await client.connect();
-    db = client.db("dialogflowDB");
-    console.log("✅ Connected to MongoDB");
-  } catch (err) {
-    console.error("❌ MongoDB connection failed:", err);
-  }
-}
-connectDB();
-
-// === Default Route ===
-app.get("/", (req, res) => res.send("🚀 Webhook Running"));
-
-// === Dialogflow Webhook ===
+// === Webhook ===
 app.post("/webhook", async (req, res) => {
   const agent = new WebhookClient({ request: req, response: res });
 
+  // --- INTENTS ---
   function hi(agent) {
-    agent.add("Hello! 👋 Welcome to SMIT registration.");
+    agent.add("👋 Hello! Welcome to SMIT registration.");
   }
 
   function available_courses(agent) {
-    agent.add(`We offer the following IT courses:
+    agent.add(`📘 Available Courses:
 1️⃣ Web & Mobile App Development
 2️⃣ Graphic Designing
 3️⃣ Data Science & AI
 4️⃣ Cloud Computing
-5️⃣ Cyber Security
-Would you like to register for one of these?`);
+5️⃣ Cyber Security`);
   }
 
   function course_information(agent) {
-    agent.add(`📘 Course Information:
-Classes are held weekdays (morning & evening batches).
-Duration: 8–10 months.
-Attendance is mandatory.`);
+    agent.add(`🧠 Classes are held weekdays (morning/evening).
+Duration: 8–10 months. Attendance mandatory.`);
   }
 
   async function register(agent) {
     const { number, any, lastname, phone, courses, email } = agent.parameters;
-    const clean = {
-      number: Array.isArray(number) ? number[0] : number,
+
+    const data = {
       name: Array.isArray(any) ? any[0] : any,
-      lastname: Array.isArray(lastname) ? lastname[0] : lastname,
+      fatherName: Array.isArray(lastname) ? lastname[0] : lastname,
+      cnic: Array.isArray(number) ? number[0] : number,
       phone: Array.isArray(phone) ? phone[0] : phone,
-      courses: Array.isArray(courses) ? courses[0] : courses,
+      course: Array.isArray(courses) ? courses[0] : courses,
       email: Array.isArray(email) ? email[0] : email,
       timestamp: new Date(),
     };
 
-    agent.add(`✅ Registration received!  
-👤 ${clean.name} ${clean.lastname}  
-📧 ${clean.email}  
-Your confirmation email will arrive soon!`);
+    console.log("📦 Received:", data);
 
-    // === Background save + email ===
-    try {
-      if (!db) return console.error("❌ No DB connection yet");
+    // Respond immediately to Dialogflow to prevent timeout
+    agent.add(`✅ Registration received!
+👤 ${data.name} ${data.fatherName}
+📧 ${data.email}
+📘 ${data.course}
+Your confirmation email will arrive soon.`);
 
-      const result = await db.collection("register").insertOne(clean);
-      console.log("✅ Saved to MongoDB:", result.insertedId);
+    // Background async task (MongoDB + Nodemailer)
+    (async () => {
+      try {
+        // Save to MongoDB
+        if (db) {
+          await db.collection("register").insertOne(data);
+          console.log("✅ Saved to MongoDB");
+        }
 
-      const transporter = nodemailer.createTransport({
-        service: "gmail",
-        auth: {
-          user: "webwisdom35@gmail.com",
-          pass: "onqr zypr bjod actg", // Gmail App Password
-        },
-      });
+        // Setup Nodemailer
+        const transporter = nodemailer.createTransport({
+          host: "smtp.gmail.com",
+          port: 587,
+          secure: false,
+          auth: {
+            user: "webwisdom35@gmail.com",
+            pass: "onqr zypr bjod actg", // your Gmail app password
+          },
+        });
 
-      const htmlBody = `
-        <div style="border:2px solid #000;padding:15px;font-family:Arial">
-          <h3>🎓 SMIT Registration Card</h3>
-          <p><strong>Name:</strong> ${clean.name} ${clean.lastname}</p>
-          <p><strong>CNIC:</strong> ${clean.number}</p>
-          <p><strong>Phone:</strong> ${clean.phone}</p>
-          <p><strong>Course:</strong> ${clean.courses}</p>
-          <p><strong>Email:</strong> ${clean.email}</p>
+        // Email HTML
+        const html = `
+        <div style="width:320px;border:2px solid #000;padding:20px;font-family:Arial">
+          <img style="display:block;margin:auto" width="150"
+            src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQ-cXFuavrc6SQ1s7DJvs55FQ-BF0bqYSM-iw&s" alt="">
+          <h3 style="text-align:center;">🎓 SMIT Registration</h3>
+          <p><b>Name:</b> ${data.name}</p>
+          <p><b>Father Name:</b> ${data.fatherName}</p>
+          <p><b>CNIC:</b> ${data.cnic}</p>
+          <p><b>Course:</b> ${data.course}</p>
+          <p><b>Phone:</b> ${data.phone}</p>
+          <p><b>Email:</b> ${data.email}</p>
+          <hr>
+          <p style="font-size:12px;text-align:center;">Valid for SMIT’s premises only.</p>
         </div>`;
 
-      const info = await transporter.sendMail({
-        from: '"SMIT Registration" <webwisdom35@gmail.com>',
-        to: clean.email,
-        subject: "🎓 SMIT Registration Confirmation",
-        html: htmlBody,
-      });
+        const info = await transporter.sendMail({
+          from: '"SMIT Registration" <webwisdom35@gmail.com>',
+          to: data.email,
+          subject: "🎓 SMIT Registration Confirmation",
+          html,
+        });
 
-      console.log("📧 Email sent:", info.messageId);
-    } catch (err) {
-      console.error("❌ Background error:", err);
-    }
+        console.log("📧 Email sent:", info.messageId);
+      } catch (err) {
+        console.error("❌ Background process failed:", err);
+      }
+    })();
   }
 
+  // === Intent Map ===
   const intentMap = new Map([
     ["Default Welcome Intent", hi],
     ["available_courses", available_courses],
     ["course_information", course_information],
     ["register", register],
   ]);
+
   agent.handleRequest(intentMap);
 });
 
-// === Start Server ===
 app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
